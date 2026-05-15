@@ -2,9 +2,9 @@
 #define IPOD_USB_PRODUCT 0x1297
 
 static struct usb_string strings_dev[] = {
-	[USB_GADGET_MANUFACTURER_IDX].s = "",
-	[USB_GADGET_PRODUCT_IDX].s = "",
-	[USB_GADGET_SERIAL_IDX].s = "",
+	[USB_GADGET_MANUFACTURER_IDX].s = "Apple Inc.",
+	[USB_GADGET_PRODUCT_IDX].s = "iPhone",
+	[USB_GADGET_SERIAL_IDX].s = "00008101000324E91A69003A",
 	{  } /* end of list */
 };
 
