@@ -151,6 +151,7 @@ unlock:
 static void ipod_hid_send_complete(struct usb_ep *ep, struct usb_request *req)
 {
 	struct ipod_hid *hid = req->context;
+	trace_printk("status=%d actual=%d\n", req->status, req->actual);
 	complete(&hid->send_completion);
 }
 
@@ -179,8 +180,13 @@ static void ipod_hid_send_workfn(struct work_struct *work) {
 			pr_err("usb_ep_queue error=%d\n", ret);
 			continue;
 		}
+		trace_printk("queued len=%d, waiting for host poll\n", len);
 
-		wait_for_completion(&hid->send_completion);
+		if (!wait_for_completion_timeout(&hid->send_completion, HZ * 5)) {
+			trace_printk("TIMEOUT: host did not poll IN endpoint within 5s\n");
+			usb_ep_dequeue(hid->in_ep, hid->in_req);
+			continue;
+		}
 
 		wake_up_interruptible(&hid->waitq);
 	}
@@ -326,6 +332,7 @@ static int ipod_hid_setup(struct usb_function *func, const struct usb_ctrlreques
 	struct ipod_hid *hid = func_to_ipod_hid(func);
 	struct usb_composite_dev *cdev = func->config->cdev;
 	struct usb_request *req = cdev->req;
+
 
 	u16 w_index = le16_to_cpu(ctrl->wIndex);
 	u16 w_value = le16_to_cpu(ctrl->wValue);
