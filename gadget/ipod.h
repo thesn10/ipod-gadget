@@ -280,3 +280,21 @@ static struct usb_descriptor_header *ipod_hid_desc_fs_hs[] = {
 
 	NULL
 };
+
+static struct usb_endpoint_descriptor ipod_hid_out_endpoint = {
+	.bLength =		USB_DT_ENDPOINT_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bEndpointAddress =	USB_DIR_OUT,
+	.bmAttributes =		USB_ENDPOINT_XFER_INT,
+	.wMaxPacketSize =	cpu_to_le16(64),
+	.bInterval =		1,
+};
+
+static struct usb_descriptor_header *ipod_hid_desc_fs_hs_out[] = {
+	(struct usb_descriptor_header *) &ipod_hid_desc,
+	(struct usb_descriptor_header *) &ipod_hid_desc2,
+	(struct usb_descriptor_header *) &ipod_hid_endpoint,
+	(struct usb_descriptor_header *) &ipod_hid_out_endpoint,
+
+	NULL
+};

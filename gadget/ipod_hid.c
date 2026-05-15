@@ -30,6 +30,10 @@ static bool high_speed = false;
 module_param(high_speed, bool, 0);
 MODULE_PARM_DESC(high_speed, "Use high speed HID report descriptor (default: full speed)");
 
+static bool out_ep = false;
+module_param(out_ep, bool, 0);
+MODULE_PARM_DESC(out_ep, "Add interrupt OUT endpoint for host->device iAP (default: off)");
+
 static unsigned char *ipod_hid_report = ipod_hid_report_fs;
 static size_t ipod_hid_report_size = sizeof(ipod_hid_report_fs);
 
@@ -46,6 +50,8 @@ struct ipod_hid
 
 	int intf;
 	struct usb_ep *in_ep;
+	struct usb_ep *out_ep;
+	struct usb_request *out_req;
 
 	//char device
 	// dev_t dev_id;
@@ -95,6 +101,28 @@ static void ipod_hid_recv_complete(struct usb_ep *ep, struct usb_request *req)
 	wake_up_interruptible(&hid->waitq);
 }
 
+
+static void ipod_hid_recv_out_complete(struct usb_ep *ep, struct usb_request *req)
+{
+	struct ipod_hid *hid = req->context;
+	int copied;
+
+	if (req->status) {
+		if (req->status != -ESHUTDOWN && req->status != -ECONNRESET)
+			pr_err("out_ep recv error: %d\n", req->status);
+		return;
+	}
+
+	trace_printk("out actual=%d\n", req->actual);
+	copied = kfifo_in(&hid->read_fifo, req->buf, req->actual);
+	if (unlikely(copied != req->actual))
+		pr_err("recv out buffer full!\n");
+
+	wake_up_interruptible(&hid->waitq);
+
+	req->length = REPORT_LENGTH;
+	usb_ep_queue(ep, req, GFP_ATOMIC);
+}
 
 static ssize_t ipod_hid_dev_read(struct file *file, char __user *buffer,size_t count, loff_t *ptr)
 {
@@ -420,6 +448,26 @@ static int ipod_hid_set_alt(struct usb_function *func, unsigned intf, unsigned a
 			return ret;
 		}
 
+		if (out_ep && hid->out_ep) {
+			usb_ep_disable(hid->out_ep);
+			ret = config_ep_by_speed(func->config->cdev->gadget, &hid->func, hid->out_ep);
+			if (ret) {
+				DBG(func->config->cdev, "config_ep_by_speed OUT FAILED!\n");
+				return ret;
+			}
+			ret = usb_ep_enable(hid->out_ep);
+			if (ret < 0) {
+				DBG(func->config->cdev, "Enable OUT endpoint FAILED!\n");
+				return ret;
+			}
+			hid->out_req->length = REPORT_LENGTH;
+			ret = usb_ep_queue(hid->out_ep, hid->out_req, GFP_ATOMIC);
+			if (ret)
+				pr_err("out_ep initial queue error=%d\n", ret);
+			else
+				trace_printk("out_ep enabled and queued\n");
+		}
+
 		return 0;
 	}
 
@@ -431,6 +479,8 @@ static void ipod_hid_disable(struct usb_function *func)
 	struct ipod_hid *hid = func_to_ipod_hid(func);
 	DBG(func->config->cdev, " = %s() \n", __FUNCTION__);
 
+	if (out_ep && hid->out_ep)
+		usb_ep_disable(hid->out_ep);
 	usb_ep_disable(hid->in_ep);
 }
 
@@ -449,15 +499,27 @@ static int ipod_hid_bind(struct usb_configuration *conf, struct usb_function *fu
 	//usb stuff
 	hid->in_ep = usb_ep_autoconfig(conf->cdev->gadget, &ipod_hid_endpoint);
 	if (!hid->in_ep) {
-		ERROR(conf->cdev, "usb_ep_autoconfig FAILED\n");
+		ERROR(conf->cdev, "usb_ep_autoconfig IN FAILED\n");
 		return -ENODEV;
 	}
 
-	#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,6,0)
-	ret = usb_assign_descriptors(func, ipod_hid_desc_fs_hs, ipod_hid_desc_fs_hs, NULL, NULL);
-	#else
-	ret = usb_assign_descriptors(func, ipod_hid_desc_fs_hs, ipod_hid_desc_fs_hs, NULL);
-	#endif
+	if (out_ep) {
+		hid->out_ep = usb_ep_autoconfig(conf->cdev->gadget, &ipod_hid_out_endpoint);
+		if (!hid->out_ep) {
+			ERROR(conf->cdev, "usb_ep_autoconfig OUT FAILED\n");
+			return -ENODEV;
+		}
+	}
+
+	{
+		struct usb_descriptor_header **descs =
+			out_ep ? ipod_hid_desc_fs_hs_out : ipod_hid_desc_fs_hs;
+		#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,6,0)
+		ret = usb_assign_descriptors(func, descs, descs, NULL, NULL);
+		#else
+		ret = usb_assign_descriptors(func, descs, descs, NULL);
+		#endif
+	}
 
 	if(ret) {
 		return ret;
@@ -465,6 +527,14 @@ static int ipod_hid_bind(struct usb_configuration *conf, struct usb_function *fu
 
 	hid->in_req = usb_ep_alloc_request(hid->in_ep, GFP_KERNEL);
 	hid->in_req->buf = kmalloc(REPORT_LENGTH, GFP_KERNEL);
+
+	if (out_ep && hid->out_ep) {
+		hid->out_req = usb_ep_alloc_request(hid->out_ep, GFP_KERNEL);
+		hid->out_req->buf = kmalloc(REPORT_LENGTH, GFP_KERNEL);
+		hid->out_req->length = REPORT_LENGTH;
+		hid->out_req->complete = ipod_hid_recv_out_complete;
+		hid->out_req->context = hid;
+	}
 
 	
 	
@@ -495,8 +565,16 @@ static void ipod_hid_unbind(struct usb_configuration *conf, struct usb_function 
 	#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
 	usb_ep_autoconfig_release(hid->in_ep);
 	#endif
-
 	hid->in_ep = NULL;
+
+	if (out_ep && hid->out_ep) {
+		kfree(hid->out_req->buf);
+		usb_ep_free_request(hid->out_ep, hid->out_req);
+		#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,4,0)
+		usb_ep_autoconfig_release(hid->out_ep);
+		#endif
+		hid->out_ep = NULL;
+	}
 
 
 	usb_function_activate(func);
