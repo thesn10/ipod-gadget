@@ -44,7 +44,8 @@ make ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- KERNEL_PATH=/home/andrew/pi-linux
 modprobe libcomposite
 insmod g_ipod_audio.ko
 insmod g_ipod_hid.ko
-insmod g_ipod_gadget.ko [swap_configs=0] [product_id=0x1297]
+insmod g_ipod_hid.ko [high_speed=0]
+insmod g_ipod_gadget.ko [swap_configs=0] [product_id=0x1297] [high_speed=0]
 
 #optional params
 swap_config: swap USB configurations. 
@@ -52,6 +53,10 @@ Might be useful when the dock sees only the Mass Storage configuation.
 
 product_id: override the usb product id.
 See doc/apple-usb.ids for the list of ids
+
+high_speed (g_ipod_hid + g_ipod_gadget): use USB high speed and the corresponding larger HID report
+descriptor. Default is full speed, which matches the iAP1 framing used by classic iPod docks and
+car radios. Set high_speed=1 on both modules together if your host supports it.
 
 ```
 

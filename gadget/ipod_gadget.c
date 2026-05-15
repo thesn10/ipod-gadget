@@ -27,6 +27,10 @@ static ushort product_id = 0;
 module_param(product_id, ushort, 0);
 MODULE_PARM_DESC(product_id, "Override USB Product ID");
 
+static bool high_speed = false;
+module_param(high_speed, bool, 0);
+MODULE_PARM_DESC(high_speed, "Use USB high speed instead of full speed");
+
 static struct usb_function_instance *fi_ms;
 static struct usb_function *f_ms;
 
@@ -211,6 +215,11 @@ static int __init ipod_init(void)
 	if(product_id != 0) {
 		device_desc.idProduct = cpu_to_le16(product_id);
 		pr_info("override usb idProduct: %04x\n", product_id);
+	}
+
+	if (!high_speed) {
+		ipod_driver.max_speed = USB_SPEED_FULL;
+		pr_info("using USB full speed\n");
 	}
 
 	return usb_composite_probe(&ipod_driver);

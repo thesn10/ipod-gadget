@@ -26,6 +26,13 @@
 
 #define REPORT_LENGTH 1024
 
+static bool high_speed = false;
+module_param(high_speed, bool, 0);
+MODULE_PARM_DESC(high_speed, "Use high speed HID report descriptor (default: full speed)");
+
+static unsigned char *ipod_hid_report = ipod_hid_report_fs;
+static size_t ipod_hid_report_size = sizeof(ipod_hid_report_fs);
+
 struct class *ipod_hid_class;
 
 struct ipod_hid
@@ -336,7 +343,7 @@ static int ipod_hid_setup(struct usb_function *func, const struct usb_ctrlreques
 	{
 	case USB_REQ_GET_DESCRIPTOR:
 		VDBG(cdev, "get hid descriptor\n");
-		memcpy(req->buf, ipod_hid_report, sizeof(ipod_hid_report));
+		memcpy(req->buf, ipod_hid_report, ipod_hid_report_size);
 		goto respond;
 		break;
 	case HID_REQ_GET_REPORT:
@@ -628,6 +635,19 @@ DECLARE_USB_FUNCTION(ipod_hid, ipod_hid_alloc_inst, ipod_hid_alloc);
 
 static int __init ipod_hid_mod_init(void)
 {
+	if (high_speed) {
+		ipod_hid_report = ipod_hid_report_hs;
+		ipod_hid_report_size = sizeof(ipod_hid_report_hs);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,12,34)
+		ipod_hid_desc2.rpt_desc.wDescriptorLength = cpu_to_le16(sizeof(ipod_hid_report_hs));
+#else
+		ipod_hid_desc2.desc[0].wDescriptorLength = cpu_to_le16(sizeof(ipod_hid_report_hs));
+#endif
+		pr_info("using high speed HID report descriptor\n");
+	} else {
+		pr_info("using full speed HID report descriptor\n");
+	}
+
 	#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,4,0)
 	ipod_hid_class = class_create("iap");
 	#else
