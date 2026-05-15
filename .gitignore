@@ -106,3 +106,6 @@ all.config
 *.kdev4
 
 cmd/ipod/ipod
+compile_commands.json
+
+CLAUDE.md
