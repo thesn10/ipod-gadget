@@ -29,7 +29,7 @@
     {
       "name": "Linux 6.12 – Raspberry Pi (ARM)",
       "includePath": [
-        "${workspaceFolder}/**",
+        "''${workspaceFolder}/**",
         "KERNEL_BUILD_PLACEHOLDER/include",
         "KERNEL_BUILD_PLACEHOLDER/arch/arm/include",
         "KERNEL_BUILD_PLACEHOLDER/arch/arm/include/generated",
@@ -39,7 +39,7 @@
       "defines": [
         "__KERNEL__",
         "MODULE",
-        "KBUILD_MODNAME=\"g_ipod_gadget\""
+        "KBUILD_MODNAME=\\\"g_ipod_gadget\\\""
       ],
       "compilerPath": "CLANGD_PLACEHOLDER",
       "cStandard": "gnu11",
