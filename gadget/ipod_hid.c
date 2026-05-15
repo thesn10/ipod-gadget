@@ -87,8 +87,8 @@ static void ipod_hid_recv_complete(struct usb_ep *ep, struct usb_request *req)
 	struct ipod_hid *hid = req->context;
 	int copied;
 	trace_printk("len=%d actual=%d \n", req->length, req->actual);
-	copied = kfifo_in(&hid->read_fifo, req->buf, req->length);
-	if(unlikely(copied != req->length)) {
+	copied = kfifo_in(&hid->read_fifo, req->buf, req->actual);
+	if(unlikely(copied != req->actual)) {
 		pr_err("recv buffer full!\n");
 		return;
 	}
