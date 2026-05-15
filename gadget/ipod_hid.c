@@ -338,6 +338,8 @@ static int ipod_hid_setup(struct usb_function *func, const struct usb_ctrlreques
 		"Control req: %02x.%02x v%04x i%04x l%d\n",
 		ctrl->bRequestType, ctrl->bRequest,
 		w_value, w_index, w_length);
+	trace_printk("setup: bRequestType=%02x bRequest=%02x wValue=%04x wIndex=%04x wLength=%d\n",
+		ctrl->bRequestType, ctrl->bRequest, w_value, w_index, w_length);
 
 	switch (ctrl->bRequest)
 	{
