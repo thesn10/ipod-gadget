@@ -495,6 +495,7 @@ static int ipod_hid_bind(struct usb_configuration *conf, struct usb_function *fu
 	hid->intf = usb_interface_id(conf, func);
 
 	ipod_hid_desc.bInterfaceNumber = hid->intf;
+	ipod_hid_desc.bNumEndpoints = out_ep ? 2 : 1;
 
 	//usb stuff
 	hid->in_ep = usb_ep_autoconfig(conf->cdev->gadget, &ipod_hid_endpoint);
