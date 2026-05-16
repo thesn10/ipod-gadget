@@ -120,6 +120,14 @@ static int ipod_bind(struct usb_composite_dev *cdev)
 	int ret = 0;
 	DBG(cdev, " = %s() \n", __FUNCTION__);
 
+	/* Kernel 6.x composite framework no longer automatically sets
+	 * iManufacturer/iProduct/iSerialNumber in the device descriptor
+	 * from driver->strings. String IDs are assigned before bind() is
+	 * called, so read them back and set the device descriptor explicitly. */
+	device_desc.iManufacturer = strings_dev[USB_GADGET_MANUFACTURER_IDX].id;
+	device_desc.iProduct      = strings_dev[USB_GADGET_PRODUCT_IDX].id;
+	device_desc.iSerialNumber = strings_dev[USB_GADGET_SERIAL_IDX].id;
+
 	fi_ms = usb_get_function_instance("mass_storage");
 	if(IS_ERR(fi_ms)) {
 		return PTR_ERR(fi_ms);
