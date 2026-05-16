@@ -124,7 +124,7 @@ static int ipod_bind(struct usb_composite_dev *cdev)
 	 * for driver->strings automatically, so string IDs stay 0 and
 	 * iManufacturer/iProduct/iSerialNumber are never set. Register them
 	 * explicitly here, then wire up the device descriptor fields. */
-	ret = usb_string_ids_tab(cdev, &stringtab_dev);
+	ret = usb_string_ids_tab(cdev, stringtab_dev.strings);
 	if (ret < 0)
 		return ret;
 	device_desc.iManufacturer = strings_dev[USB_GADGET_MANUFACTURER_IDX].id;
