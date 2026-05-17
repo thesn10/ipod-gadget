@@ -308,7 +308,8 @@ static void ipod_audio_iso_complete(struct usb_ep *ep, struct usb_request *req)
 		return;
 
 	if (req->status)
-		trace_ipod_req_out_done(req);
+		trace_printk("iso_complete: status=%d actual=%d/%d\n",
+			     req->status, req->actual, req->length);
 
 	substream = audio->ss;
 
