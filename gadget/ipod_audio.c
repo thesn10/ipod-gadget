@@ -303,31 +303,30 @@ static void ipod_audio_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	struct ipod_audio *audio = req->context;
 	int ret;
 
-	//trace_printk("status=%d ep_enabled=%d\n", req->status, audio->in_ep_enabled);
-	//trace_ipod_req_out_done(req);
-
 	/* If the endpoint is being torn down, drop the request entirely. */
 	if (!audio->in_ep_enabled)
 		return;
 
-	/*
-	 * On transient USB errors (e.g. -EPROTO, -ETIMEDOUT) skip the data
-	 * copy but still re-queue so the transfer pipeline stays alive.
-	 * Without this every error permanently removes a request from
-	 * circulation; once all NUM_USB_AUDIO_TRANSFERS are gone audio
-	 * silently dies until the host does a set_alt stop/start cycle.
-	 */
 	if (req->status)
-		goto exit;
-
-	//if (audio->dma_area == NULL)
-	//	goto exit;
+		trace_ipod_req_out_done(req);
 
 	substream = audio->ss;
 
 	if (!substream)
 		goto exit;
 
+	/*
+	 * Advance hw_ptr regardless of req->status.
+	 *
+	 * Isochronous USB has no retry semantics: each request occupies a fixed
+	 * SOF frame.  Whether the transfer succeeded or not, that time slot is
+	 * gone and the audio stream has moved on by exactly req->actual bytes.
+	 * Not advancing hw_ptr on error would freeze the ALSA clock, causing
+	 * wait_for_avail to time out and return -EIO to userspace.
+	 *
+	 * On error we still re-queue (keeps the pipeline alive) and still
+	 * advance hw_ptr (time passed), but skip the memcpy (no real transfer).
+	 */
 	spin_lock_irqsave(&audio->play_lock, flags);
 
 	if (audio->cnt < 9)
@@ -342,15 +341,20 @@ static void ipod_audio_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	}
 	audio->cnt = (audio->cnt + 1) % 10;
 
-	pending = audio->hw_ptr % audio->period_size;
-	pending += req->actual;
-	if (pending >= audio->period_size)
-		update_alsa = true;
+	if (audio->dma_bytes && audio->period_size) {
+		pending = audio->hw_ptr % audio->period_size;
+		pending += req->actual;
+		if (pending >= audio->period_size)
+			update_alsa = true;
 
-	hw_ptr = audio->hw_ptr;
-	audio->hw_ptr = (audio->hw_ptr + req->actual) % audio->dma_bytes;
+		hw_ptr = audio->hw_ptr;
+		audio->hw_ptr = (audio->hw_ptr + req->actual) % audio->dma_bytes;
+	}
 
 	spin_unlock_irqrestore(&audio->play_lock, flags);
+
+	if (req->status)
+		goto exit;
 
 	/* Pack USB load in ALSA ring buffer */
 	pending = audio->dma_bytes - hw_ptr;
@@ -359,7 +363,6 @@ static void ipod_audio_iso_complete(struct usb_ep *ep, struct usb_request *req)
 	{
 		if (unlikely(pending < req->actual))
 		{
-			//printk("Oops: %d / %d \n", pending, req->actual);
 			memcpy(req->buf, audio->dma_area + hw_ptr, pending);
 			memcpy(req->buf + pending, audio->dma_area, req->actual - pending);
 		}
