@@ -179,18 +179,23 @@ static int ipod_audio_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 
 	spin_lock_irqsave(&audio->play_lock, flags);
 
-	/* Reset */
-	audio->hw_ptr = 0;
-
 	switch (cmd)
 	{
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
+		audio->hw_ptr = 0;
 		audio->ss = substream;
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
+		audio->hw_ptr = 0;
 		audio->ss = NULL;
+		break;
+	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
+		audio->ss = NULL;
+		break;
+	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
+		audio->ss = substream;
 		break;
 	default:
 		err = -EINVAL;
@@ -200,9 +205,10 @@ static int ipod_audio_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (!audio->ss) {
-			/* PCM stream is ending - stop the silence drain work */
+			/* PCM stream is ending or pausing - stop the silence drain work */
 			cancel_delayed_work(&audio->silence_work);
-			memset(audio->rbuf, 0, MAX_USB_AUDIO_PACKET_SIZE * NUM_USB_AUDIO_TRANSFERS);
+			if (cmd != SNDRV_PCM_TRIGGER_PAUSE_PUSH)
+				memset(audio->rbuf, 0, MAX_USB_AUDIO_PACKET_SIZE * NUM_USB_AUDIO_TRANSFERS);
 		} else if (!audio->in_ep_enabled && audio->period_us) {
 			/*
 			 * PCM (re)started while USB endpoint is still down
